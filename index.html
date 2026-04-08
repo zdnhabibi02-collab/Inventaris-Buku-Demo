@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LibraryOS — Inventaris Buku</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet"/>
+    />
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <!-- HEADER -->
+    <header>
+      <div class="logo">
+        <span class="logo-mark">LibraryOS</span>
+        <span class="logo-tag">POINTER-BASED</span>
+      </div>
+      <div class="header-stats">
+        <div class="stat">
+          <span class="stat-num" id="total-buku">0</span>
+          <span class="stat-label">Total Judul</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="total-stok">0</span>
+          <span class="stat-label">Total Stok</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="stok-low-count">0</span>
+          <span class="stat-label">Stok Kritis</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="splash-screen" id="splash-screen">
+      <div class="splash-content">
+        <div class="splash-text">
+          <span class="splash-word">Library</span>
+          <span class="splash-word">OS</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- MAIN TABLE -->
+      <div class="main-panel">
+        <div class="section-header">
+          <span class="section-title">Inventaris Buku</span>
+          <span class="section-text">Platform Kelola Data Buku</span>
+        </div>
+
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input
+            class="search-input"
+            id="search"
+            type="text"
+            placeholder="Cari judul atau pengarang..."
+          />
+        </div>
+
+        <div class="table-wrap">
+          <div class="table-head">
+            <span class="th">ID</span>
+            <span class="th th-cover">Cover</span>
+            <span class="th">Judul &amp; Pengarang</span>
+            <span class="th th-hide-sm">Pointer Addr</span>
+            <span class="th">Stok</span>
+            <span class="th">Aksi</span>
+          </div>
+          <div id="book-list"></div>
+        </div>
+      </div>
+
+      <!-- SIDE PANEL -->
+      <div class="side-panel">
+        <!-- FORM TAMBAH -->
+        <div class="panel-block">
+          <div class="panel-label">Tambah Buku</div>
+
+          <!-- UPLOAD COVER -->
+          <div class="form-group">
+            <label class="form-label">Cover Buku</label>
+            <div class="upload-area" id="upload-area" onclick="document.getElementById('f-cover').click()">
+              <div class="upload-preview" id="upload-preview">
+                <div class="upload-placeholder">
+                  <span class="upload-icon">📖</span>
+                  <span class="upload-text">Klik untuk upload cover</span>
+                  <span class="upload-hint">JPG, PNG, WEBP — maks 2MB</span>
+                </div>
+              </div>
+            </div>
+            <input type="file" id="f-cover" accept="image/*" style="display:none" onchange="handleCoverChange(event)" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Judul</label>
+            <input class="form-input" id="f-judul" placeholder="Nama buku..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Pengarang</label>
+            <input
+              class="form-input"
+              id="f-pengarang"
+              placeholder="Nama penulis..."
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Stok Awal</label>
+            <input
+              class="form-input"
+              id="f-stok"
+              type="number"
+              min="0"
+              placeholder="0"
+              value="5"
+            />
+          </div>
+          <button class="btn-primary" onclick="tambahBuku()">
+            + Tambah ke Inventaris
+          </button>
+        </div>
+
+        <!-- DETAIL BUKU (muncul saat pilih) -->
+        <div class="panel-block">
+          <div class="panel-label">Detail &amp; Edit</div>
+          <div class="detail-card empty" id="detail-card">
+            <span
+              style="
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--muted);
+              "
+              >← pilih buku dari tabel</span
+            >
+          </div>
+        </div>
+
+        <!-- POINTER LOG -->
+        <div class="panel-block">
+          <div class="panel-label">Pointer Log</div>
+          <div class="log-wrap" id="ptr-log">
+            <span class="log-entry log-info"
+              >// operasi pointer akan muncul di sini</span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+    <button id="toggle-side" class="side-toggle" onclick="toggleSidePanel()">☰</button>
+
+    <script src="api.js"></script>
+    <script src="index.js"></script>
+  </body>
+</html>
