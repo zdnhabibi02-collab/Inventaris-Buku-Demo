@@ -46,6 +46,17 @@ function hideSplash() {
   }, 2500); // 2.5s after animations
 }
 
+function scrollToInventory() {
+  const target = document.getElementById("inventory-section");
+  if (target) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    const search = document.getElementById("search");
+    if (search) {
+      search.focus({ preventScroll: true });
+    }
+  }
+}
+
 // ============================================================
 
 //  COVER UPLOAD — konversi file ke base64
