@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LibraryOS — Inventaris Buku</title>
     <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet"/>
+      href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
     />
     <link rel="stylesheet" href="index.css" />
   </head>
@@ -20,14 +22,6 @@
         <div class="stat">
           <span class="stat-num" id="total-buku">0</span>
           <span class="stat-label">Total Judul</span>
-        </div>
-        <div class="stat">
-          <span class="stat-num" id="total-stok">0</span>
-          <span class="stat-label">Total Stok</span>
-        </div>
-        <div class="stat">
-          <span class="stat-num" id="stok-low-count">0</span>
-          <span class="stat-label">Stok Kritis</span>
         </div>
       </div>
     </header>
@@ -46,7 +40,7 @@
       <div class="main-panel">
         <div class="section-header">
           <span class="section-title">Inventaris Buku</span>
-          <span class="section-text">Platform Kelola Data Buku</span>
+          <span class="section-text">Platform Membaca E-Book Gratis</span>
         </div>
 
         <div class="search-wrap">
@@ -55,7 +49,7 @@
             class="search-input"
             id="search"
             type="text"
-            placeholder="Cari judul atau pengarang..."
+            placeholder="Cari judul, pengarang, atau kategori..."
           />
         </div>
 
@@ -64,8 +58,8 @@
             <span class="th">ID</span>
             <span class="th th-cover">Cover</span>
             <span class="th">Judul &amp; Pengarang</span>
-            <span class="th th-hide-sm">Pointer Addr</span>
-            <span class="th">Stok</span>
+            <span class="th">Kategori</span>
+            <span class="th th-hide-sm">Addr</span>
             <span class="th">Aksi</span>
           </div>
           <div id="book-list"></div>
@@ -81,7 +75,11 @@
           <!-- UPLOAD COVER -->
           <div class="form-group">
             <label class="form-label">Cover Buku</label>
-            <div class="upload-area" id="upload-area" onclick="document.getElementById('f-cover').click()">
+            <div
+              class="upload-area"
+              id="upload-area"
+              onclick="document.getElementById('f-cover').click()"
+            >
               <div class="upload-preview" id="upload-preview">
                 <div class="upload-placeholder">
                   <span class="upload-icon">📖</span>
@@ -90,7 +88,13 @@
                 </div>
               </div>
             </div>
-            <input type="file" id="f-cover" accept="image/*" style="display:none" onchange="handleCoverChange(event)" />
+            <input
+              type="file"
+              id="f-cover"
+              accept="image/*"
+              style="display: none"
+              onchange="handleCoverChange(event)"
+            />
           </div>
 
           <div class="form-group">
@@ -106,34 +110,40 @@
             />
           </div>
           <div class="form-group">
-            <label class="form-label">Stok Awal</label>
+            <label class="form-label">Sinopsis</label>
+            <textarea
+              class="form-input"
+              id="f-sinopsis"
+              rows="4"
+              placeholder="Ringkasan cerita / isi buku..."
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kategori</label>
+            <select class="form-input" id="f-kategori">
+              <option value="">Pilih Kategori</option>
+              <option value="Fiksi">Fiksi</option>
+              <option value="Non-Fiksi">Non-Fiksi</option>
+              <option value="Pendidikan">Pendidikan</option>
+              <option value="Biografi">Biografi</option>
+              <option value="Sejarah">Sejarah</option>
+              <option value="Sains">Sains</option>
+              <option value="Teknologi">Teknologi</option>
+              <option value="Lainnya">Lainnya</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">File Ebook</label>
             <input
               class="form-input"
-              id="f-stok"
-              type="number"
-              min="0"
-              placeholder="0"
-              value="5"
+              id="f-ebook"
+              type="file"
+              accept=".pdf,.epub,.mobi,.txt,.zip"
             />
           </div>
           <button class="btn-primary" onclick="tambahBuku()">
             + Tambah ke Inventaris
           </button>
-        </div>
-
-        <!-- DETAIL BUKU (muncul saat pilih) -->
-        <div class="panel-block">
-          <div class="panel-label">Detail &amp; Edit</div>
-          <div class="detail-card empty" id="detail-card">
-            <span
-              style="
-                font-family: var(--mono);
-                font-size: 11px;
-                color: var(--muted);
-              "
-              >← pilih buku dari tabel</span
-            >
-          </div>
         </div>
 
         <!-- POINTER LOG -->
@@ -149,9 +159,18 @@
     </div>
 
     <div id="toast"></div>
-    <button id="toggle-side" class="side-toggle" onclick="toggleSidePanel()">☰</button>
+    <button id="toggle-side" class="side-toggle" onclick="toggleSidePanel()">
+      ☰
+    </button>
 
     <script src="api.js"></script>
     <script src="index.js"></script>
+
+    <div id="edit-modal" class="modal-overlay">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
   </body>
 </html>

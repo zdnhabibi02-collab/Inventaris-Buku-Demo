@@ -2,12 +2,53 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient } = require("mongodb");
 require("dotenv").config();
+const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
+
+// ============================================================
+//  FILE UPLOAD CONFIG - Multer untuk ebook
+// ============================================================
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const baseName = path.basename(file.originalname, ext);
+    cb(null, `${baseName}-${timestamp}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = [".pdf", ".epub", ".mobi", ".txt", ".zip"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          "Format file tidak didukung. Gunakan: PDF, EPUB, MOBI, TXT, ZIP",
+        ),
+      );
+    }
+  },
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI =
   process.env.MONGODB_URI ||
-  "mongodb+srv://225443018_db_user:Polmansyad@cluster0.yns6u6f.mongodb.net/?appName=Cluster0";
+  "mongodb+srv://syaad:Polmansyad@projectstrukdat.ivd89po.mongodb.net/?appName=projectstrukdat";
 const DB_NAME = process.env.DB_NAME || "book_inventary";
 
 let db;
@@ -15,8 +56,7 @@ let booksCollection;
 
 // Middleware
 app.use(cors());
-// Naikkan limit JSON untuk base64 cover image (maks ~2MB → ~2.7MB base64)
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(express.static("./"));
 
 // ============================================================
@@ -45,20 +85,25 @@ async function connectDB() {
 app.get("/api/books", async (req, res) => {
   try {
     const { search } = req.query;
-    let query = { _id: { $type: "number" } };
+    let query = {};
 
     if (search) {
       query = {
-        _id: { $type: "number" },
         $or: [
           { judul: { $regex: search, $options: "i" } },
           { pengarang: { $regex: search, $options: "i" } },
+          { sinopsis: { $regex: search, $options: "i" } },
+          { kategori: { $regex: search, $options: "i" } },
         ],
       };
     }
 
     const books = await booksCollection.find(query).toArray();
-    res.json(books);
+    const normalizedBooks = books.map((b) => ({
+      ...b,
+      cover: b.cover || b.gambar || "",
+    }));
+    res.json(normalizedBooks);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -70,18 +115,31 @@ app.get("/api/books/:id", async (req, res) => {
     const bookId = parseInt(req.params.id, 10);
     const book = await booksCollection.findOne({ _id: bookId });
     if (!book) return res.status(404).json({ error: "Buku tidak ditemukan" });
-    res.json(book);
+    res.json({ ...book, cover: book.cover || book.gambar || "" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// POST - Tambah buku baru (pakai _id custom, terima cover base64 opsional)
+// POST - Tambah buku baru (pakai _id custom)
 app.post("/api/books", async (req, res) => {
   try {
-    const { judul, pengarang, stok, cover } = req.body;
-    if (!judul || !pengarang) {
-      return res.status(400).json({ error: "Judul dan pengarang harus diisi" });
+    const {
+      judul,
+      pengarang,
+      sinopsis,
+      kategori,
+      cover,
+      gambar,
+      ebookPath,
+      ebookName,
+      ebookSize,
+      ebookUploadedAt,
+    } = req.body;
+    if (!judul || !pengarang || !sinopsis) {
+      return res
+        .status(400)
+        .json({ error: "Judul, pengarang, dan sinopsis harus diisi" });
     }
 
     const lastBook = await booksCollection.findOne(
@@ -98,40 +156,19 @@ app.post("/api/books", async (req, res) => {
       _id: newId,
       judul,
       pengarang,
-      stok: parseInt(stok) || 0,
+      sinopsis,
+      kategori: kategori || "",
       addr,
-      // simpan cover sebagai base64 string jika ada, otherwise null
-      cover: cover || null,
+      cover: cover || gambar || "",
+      ebookPath: ebookPath || "",
+      ebookName: ebookName || "",
+      ebookSize: ebookSize || 0,
+      ebookUploadedAt: ebookUploadedAt || null,
       createdAt: new Date(),
     };
 
     await booksCollection.insertOne(newBook);
     res.status(201).json(newBook);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// PUT - Update stok buku
-app.put("/api/books/:id/stok", async (req, res) => {
-  try {
-    const { stok } = req.body;
-    const bookId = parseInt(req.params.id, 10);
-
-    if (stok === undefined || isNaN(stok) || stok < 0) {
-      return res.status(400).json({ error: "Stok tidak valid" });
-    }
-
-    const updateRes = await booksCollection.updateOne(
-      { _id: bookId },
-      { $set: { stok: parseInt(stok), updatedAt: new Date() } },
-    );
-    if (updateRes.matchedCount === 0) {
-      return res.status(404).json({ error: "Buku tidak ditemukan" });
-    }
-
-    const updated = await booksCollection.findOne({ _id: bookId });
-    res.json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -145,9 +182,29 @@ app.delete("/api/books/:id", async (req, res) => {
     if (result.deletedCount === 0) {
       return res.status(404).json({ error: "Buku tidak ditemukan" });
     }
+
+    // Reindex agar _id tetap berurutan setelah penghapusan.
+    const remaining = await booksCollection
+      .find({ _id: { $type: "number" } })
+      .sort({ _id: 1 })
+      .toArray();
+
+    const addrBase = 0x8a00;
+    const reindexed = remaining.map((book, index) => ({
+      ...book,
+      _id: index + 1,
+      addr: "0x" + (addrBase + index * 0x40).toString(16).toUpperCase(),
+    }));
+
+    await booksCollection.deleteMany({ _id: { $type: "number" } });
+    if (reindexed.length > 0) {
+      await booksCollection.insertMany(reindexed);
+    }
+
     res.json({
-      message: "Buku berhasil dihapus",
+      message: "Buku berhasil dihapus dan ID dirapikan",
       deletedCount: result.deletedCount,
+      totalBooks: reindexed.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -160,22 +217,8 @@ app.get("/api/stats", async (req, res) => {
     const totalBooks = await booksCollection.countDocuments({
       _id: { $type: "number" },
     });
-    const totalStok = await booksCollection
-      .aggregate([
-        { $match: { _id: { $type: "number" } } },
-        { $group: { _id: null, total: { $sum: "$stok" } } },
-      ])
-      .toArray();
-    const lowStockCount = await booksCollection.countDocuments({
-      _id: { $type: "number" },
-      stok: { $lte: 3 },
-    });
 
-    res.json({
-      totalBooks,
-      totalStok: totalStok[0]?.total || 0,
-      lowStockCount,
-    });
+    res.json({ totalBooks });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -191,41 +234,46 @@ app.post("/api/seed", async (req, res) => {
         _id: 1,
         judul: "Pemrograman C++",
         pengarang: "Bjarne Stroustrup",
-        stok: 5,
+        sinopsis:
+          "Pengantar praktis pemrograman C++ dari konsep dasar hingga OOP dan STL.",
         addr: "0x8A00",
-        cover: null,
+        cover: "",
       },
       {
         _id: 2,
         judul: "Clean Code",
         pengarang: "Robert C. Martin",
-        stok: 3,
+        sinopsis:
+          "Prinsip menulis kode yang bersih, mudah dibaca, dan mudah dirawat dalam tim.",
         addr: "0x8A40",
-        cover: null,
+        cover: "",
       },
       {
         _id: 3,
         judul: "The Pragmatic Programmer",
         pengarang: "Andrew Hunt",
-        stok: 7,
+        sinopsis:
+          "Kumpulan praktik terbaik untuk menjadi programmer efektif di berbagai bahasa dan proyek.",
         addr: "0x8A80",
-        cover: null,
+        cover: "",
       },
       {
         _id: 4,
         judul: "Structure & Interpretation",
         pengarang: "Abelson & Sussman",
-        stok: 2,
+        sinopsis:
+          "Membahas fondasi ilmu komputer melalui pendekatan pemrograman fungsional dan abstraksi.",
         addr: "0x8AC0",
-        cover: null,
+        cover: "",
       },
       {
         _id: 5,
         judul: "Design Patterns",
         pengarang: "Gang of Four",
-        stok: 1,
+        sinopsis:
+          "Referensi pola desain berorientasi objek untuk menyelesaikan masalah desain perangkat lunak.",
         addr: "0x8B00",
-        cover: null,
+        cover: "",
       },
     ];
 
@@ -245,6 +293,100 @@ app.post("/api/seed", async (req, res) => {
 async function start() {
   await connectDB();
 
+  // Endpoint untuk sinkronisasi ulang seluruh ID
+  app.post("/api/books/sync", async (req, res) => {
+    try {
+      const { data } = req.body;
+      console.log("Memulai Sinkronisasi...");
+
+      // 1. Hapus SEMUA data secara total
+      await booksCollection.deleteMany({});
+
+      // 2. Masukkan data baru HANYA jika array tidak kosong
+      if (data && data.length > 0) {
+        await booksCollection.insertMany(data);
+      }
+
+      console.log("Sinkronisasi Berhasil!");
+      res.json({ message: "Sync Berhasil" });
+    } catch (error) {
+      console.error("Kesalahan Server:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST - Upload ebook untuk book tertentu
+  app.post("/api/books/:id/ebook", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Tidak ada file yang diupload" });
+      }
+
+      const bookId = parseInt(req.params.id, 10);
+      const filePath = `uploads/${req.file.filename}`;
+      const fileSize = req.file.size;
+
+      const updateRes = await booksCollection.updateOne(
+        { _id: bookId },
+        {
+          $set: {
+            ebookPath: filePath,
+            ebookSize: fileSize,
+            ebookName: req.file.originalname,
+            ebookUploadedAt: new Date(),
+          },
+        },
+      );
+
+      if (updateRes.matchedCount === 0) {
+        fs.unlinkSync(req.file.path); // Hapus file jika book tidak ditemukan
+        return res.status(404).json({ error: "Buku tidak ditemukan" });
+      }
+
+      console.log(
+        `✓ Ebook uploaded untuk book #${bookId}: ${req.file.filename}`,
+      );
+
+      res.json({
+        message: "Ebook berhasil diupload",
+        path: filePath,
+        size: fileSize,
+        name: req.file.originalname,
+      });
+    } catch (error) {
+      console.error("Upload error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET - Download ebook
+  app.get("/api/books/:id/download", async (req, res) => {
+    try {
+      const bookId = parseInt(req.params.id, 10);
+      const book = await booksCollection.findOne({ _id: bookId });
+
+      if (!book || !book.ebookPath) {
+        return res
+          .status(404)
+          .json({ error: "Ebook tidak ditemukan untuk buku ini" });
+      }
+
+      const resolvedPath = path.resolve(__dirname, book.ebookPath);
+
+      // Cek file exists
+      if (!fs.existsSync(resolvedPath)) {
+        return res
+          .status(404)
+          .json({ error: "File ebook hilang dari storage" });
+      }
+
+      res.download(resolvedPath, book.ebookName || "ebook");
+    } catch (error) {
+      console.error("Download error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.listen(PORT, () => {
     console.log(`\n╔════════════════════════════════╗`);
     console.log(`║  LibraryOS Server Running      ║`);
@@ -262,3 +404,5 @@ process.on("SIGINT", async () => {
   await mongoClient.close();
   process.exit(0);
 });
+
+// trigger redeploy

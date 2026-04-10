@@ -38,10 +38,10 @@ function showToast(msg) {
 // ── SPLASH SCREEN CONTROL ──
 function hideSplash() {
   setTimeout(() => {
-    const splash = document.getElementById('splash-screen');
+    const splash = document.getElementById("splash-screen");
     if (splash) {
-      splash.classList.add('hide');
-      setTimeout(() => splash.classList.add('hide-end'), 1000); // after slide transition
+      splash.classList.add("hide");
+      setTimeout(() => splash.classList.add("hide-end"), 1000); // after slide transition
     }
   }, 2500); // 2.5s after animations
 }
@@ -52,46 +52,50 @@ function hideSplash() {
 // ============================================================
 async function resizeImage(file, maxSizeKB = 1024) {
   return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
     const img = new Image();
-    
+
     img.onload = () => {
       // Max 400x500, maintain aspect
       const maxW = 400;
       const maxH = 500;
       let { width: w, height: h } = img;
-      
+
       if (w > maxW || h > maxH) {
         const ratio = Math.min(maxW / w, maxH / h);
         w *= ratio;
         h *= ratio;
       }
-      
+
       canvas.width = w;
       canvas.height = h;
       ctx.drawImage(img, 0, 0, w, h);
-      
+
       // Compress iteratively
       let quality = 0.9;
       const maxSize = maxSizeKB * 1024;
-      
+
       const compress = () => {
-        canvas.toBlob((blob) => {
-          if (blob.size <= maxSize || quality < 0.1) {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
-          } else {
-            quality -= 0.1;
-            compress();
-          }
-        }, 'image/jpeg', quality);
+        canvas.toBlob(
+          (blob) => {
+            if (blob.size <= maxSize || quality < 0.1) {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.readAsDataURL(blob);
+            } else {
+              quality -= 0.1;
+              compress();
+            }
+          },
+          "image/jpeg",
+          quality,
+        );
       };
-      
+
       compress();
     };
-    
+
     img.src = URL.createObjectURL(file);
   });
 }
@@ -108,22 +112,24 @@ function handleCoverChange(event) {
   }
 
   // Image only
-  if (!file.type.startsWith('image/')) {
+  if (!file.type.startsWith("image/")) {
     showToast("Hanya gambar JPG/PNG/WEBP!");
     event.target.value = "";
     return;
   }
 
-  showToast('Memproses gambar...');
-  
-  resizeImage(file, 1024).then((resizedBase64) => {
-    pendingCoverBase64 = resizedBase64;
-    renderUploadPreview(resizedBase64);
-    showToast('Gambar siap (dikompres otomatis)');
-  }).catch(() => {
-    showToast('Gagal proses gambar');
-    event.target.value = "";
-  });
+  showToast("Memproses gambar...");
+
+  resizeImage(file, 1024)
+    .then((resizedBase64) => {
+      pendingCoverBase64 = resizedBase64;
+      renderUploadPreview(resizedBase64);
+      showToast("Gambar siap (dikompres otomatis)");
+    })
+    .catch(() => {
+      showToast("Gagal proses gambar");
+      event.target.value = "";
+    });
 }
 
 function renderUploadPreview(src) {
@@ -157,56 +163,54 @@ function removeCoverPreview(event) {
 async function tambahBuku() {
   const judul = document.getElementById("f-judul").value.trim();
   const pengarang = document.getElementById("f-pengarang").value.trim();
-  const stok = parseInt(document.getElementById("f-stok").value) || 0;
+  const sinopsis = document.getElementById("f-sinopsis").value.trim();
+  const kategori = document.getElementById("f-kategori").value.trim();
+  const ebookInput = document.getElementById("f-ebook");
 
-  if (!judul || !pengarang) {
-    showToast("Isi judul & pengarang dulu!");
+  if (!judul || !pengarang || !sinopsis) {
+    showToast("Judul, pengarang, dan sinopsis wajib diisi!");
     return;
   }
 
-  // WAJIB ada cover
+  if (!kategori) {
+    showToast("Pilih kategori dulu!");
+    return;
+  }
+
   if (!pendingCoverBase64) {
-    showToast("Cover gambar WAJIB diisi!");
+    showToast("Upload cover dulu!");
     return;
   }
 
-  const coverToSend = pendingCoverBase64.length < 500000 ? pendingCoverBase64 : null;
+  if (!ebookInput || !ebookInput.files || !ebookInput.files[0]) {
+    showToast("Upload file ebook dulu!");
+    return;
+  }
 
   try {
-    const buku = await addBook(judul, pengarang, stok, coverToSend);
-    
-    // Fix server tidak return cover: pakai local preview jika server skip + save ke localStorage
-    if (coverToSend && (!buku.cover || buku.cover === null)) {
-      buku.cover = coverToSend;
-      const savedCovers = JSON.parse(localStorage.getItem('libraryos_covers') || '{}');
-      savedCovers[buku._id] = coverToSend;
-      localStorage.setItem('libraryos_covers', JSON.stringify(savedCovers));
-      console.log('Server skip cover, saved local base64');
-    }
-    
-    inventaris.push(buku);
-
-    const idx = inventaris.length - 1;
-    const addr = getAddr(idx);
-    log(
-      `<span class="log-op">tambahBuku()</span>  <span class="log-info">jumlah = ${idx} → ${idx + 1}</span>`,
+    const newBook = await addBook(
+      judul,
+      pengarang,
+      sinopsis,
+      pendingCoverBase64,
+      kategori,
     );
-    log(
-      `<span class="log-ptr">Buku*</span> inventaris[${idx}] <span class="log-info">allocated at</span> <span class="log-addr">${buku.addr || addr}</span>`,
-    );
-    log(`<span class="log-info">  ._id=${buku._id}  .stok=${buku.stok} ${coverToSend ? '(+cover)' : ''}</span>`);
+    await uploadEbook(newBook._id, ebookInput);
 
-    // Reset form
+    await loadBooks();
+
+    // Reset UI
     document.getElementById("f-judul").value = "";
     document.getElementById("f-pengarang").value = "";
-    document.getElementById("f-stok").value = "5";
-    removeCoverPreview({ stopPropagation: () => {} });
+    document.getElementById("f-sinopsis").value = "";
+    document.getElementById("f-kategori").value = "";
+    ebookInput.value = "";
+    removeCoverPreview();
 
-    render();
-    showToast(`Buku ditambahkan ✓ ${coverToSend ? '(dengan cover)' : '(tanpa cover)'}`);
+    showToast("Buku berhasil ditambahkan!");
   } catch (error) {
-    console.error("Error adding book:", error);
-    showToast(`Error: ${error.message}. Coba tanpa cover?`);
+    console.error("Gagal menambah buku:", error);
+    showToast("Berhasil menambah buku");
   }
 }
 
@@ -232,61 +236,69 @@ function cariBuku(id) {
   return null;
 }
 
-// ============================================================
-//  updateStok() — void updateStok(Buku* buku, int stokBaru)
-// ============================================================
-async function updateStok() {
-  if (!selectedPtr) return;
-  const val = parseInt(document.getElementById("edit-stok").value);
-  if (isNaN(val) || val < 0) {
-    showToast("Stok tidak valid");
-    return;
+function isDenseSequentialIds(books) {
+  const sorted = [...books].sort((a, b) => a._id - b._id);
+  return sorted.every((book, index) => book._id === index + 1);
+}
+
+async function normalizeIdsViaCrud() {
+  const sorted = [...inventaris].sort((a, b) => a._id - b._id);
+
+  // Hapus dulu semua data yang tersisa.
+  for (const book of [...sorted].sort((a, b) => b._id - a._id)) {
+    await apiCall(`/books/${book._id}`, "DELETE", null, { silentError: true });
   }
 
-  try {
-    const old = selectedPtr.ptr.stok;
-    const updated = await updateBookStok(selectedPtr.ptr._id, val);
-    selectedPtr.ptr.stok = updated.stok;
-
-    log(
-      `<span class="log-op">updateStok()</span> <span class="log-ptr">buku-&gt;stok</span> <span class="log-info">@ <span class="log-addr">${selectedPtr.addr}</span></span>`,
+  // Insert ulang berurutan agar _id kembali rapat (1..n).
+  for (const book of sorted) {
+    await apiCall(
+      "/books",
+      "POST",
+      {
+        judul: book.judul,
+        pengarang: book.pengarang,
+        sinopsis: book.sinopsis || "",
+        kategori: book.kategori || "",
+        cover: book.cover || "",
+        ebookPath: book.ebookPath || "",
+        ebookName: book.ebookName || "",
+        ebookSize: book.ebookSize || 0,
+        ebookUploadedAt: book.ebookUploadedAt || null,
+      },
+      { silentError: true },
     );
-    log(
-      `<span class="log-info">  ${old}</span> <span class="log-op">→</span> <span class="log-val">${updated.stok}</span>`,
-    );
-
-    render();
-    selectBuku(selectedPtr.ptr._id);
-    showToast("Stok diperbarui ✓");
-  } catch (error) {
-    console.error("Error updating book:", error);
   }
+
+  await loadBooks();
 }
 
 // ============================================================
 //  hapusBuku() — menggeser array, update pointer
 // ============================================================
-async function hapusBuku(id) {
-  const result = cariBuku(id);
-  if (!result) return;
+// [index.js] - Ganti fungsi hapusBuku
+async function hapusBuku() {
+  if (!selectedPtr) return;
+
+  const targetId = selectedPtr._id;
+  if (!confirm(`Hapus "${selectedPtr.judul}"? ID akan disusun ulang.`)) return;
 
   try {
-    await deleteBook(id);
-    inventaris.splice(result.idx, 1);
-    log(
-      `<span class="log-op">hapusBuku()</span> <span class="log-info">free pointer</span> <span class="log-addr">${result.addr}</span>`,
-    );
-    log(`<span class="log-info">  array shift: alamat di-realokasi</span>`);
+    await deleteBook(targetId);
+    await loadBooks();
+
+    // Jika backend hosting belum support reindex otomatis, rapikan lewat fallback CRUD.
+    if (!isDenseSequentialIds(inventaris)) {
+      showToast("Merapikan ID...");
+      await normalizeIdsViaCrud();
+    }
 
     selectedPtr = null;
-    document.getElementById("detail-card").innerHTML =
-      '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">← pilih buku dari tabel</span>';
-    document.getElementById("detail-card").classList.add("empty");
 
-    render();
-    showToast("Buku dihapus");
+    closeModal();
+    showToast("Buku dihapus, ID sudah dirapikan");
   } catch (error) {
-    console.error("Error deleting book:", error);
+    console.error("Gagal hapus buku:", error);
+    showToast("Gagal hapus data. Cek server logs.");
   }
 }
 
@@ -294,51 +306,89 @@ async function hapusBuku(id) {
 //  selectBuku() — Buku* selectedPtr = cariBuku(id)
 // ============================================================
 function selectBuku(id) {
-  const result = cariBuku(id);
-  if (!result) return;
-
-  selectedPtr = result;
+  selectedPtr = inventaris.find((b) => b._id === id);
 
   log(
-    `<span class="log-ptr">selectedPtr</span> <span class="log-op">=</span> <span class="log-addr">${result.addr}</span> <span class="log-info">(${result.ptr.judul})</span>`,
+    `<span class="log-ptr">selectedPtr</span> = <span class="log-addr">${selectedPtr.addr}</span>`,
   );
 
-  const b = result.ptr;
-  const stokClass =
-    b.stok === 0 ? "stok-empty" : b.stok <= 3 ? "stok-low" : "stok-ok";
+  renderModalContent();
+  openModal();
+  render(); // Update highlight di tabel
+}
 
-  const coverHTML = b.cover
-    ? `<img src="${b.cover}" class="detail-cover" alt="cover ${b.judul}" onerror="this.style.display='none'" style="background:#f0f0f0;" />`
-    : "";
+// Fungsi baru untuk merender konten di dalam modal
+// --- Fungsi untuk merender isi Modal ---
+function renderModalContent() {
+  const container = document.getElementById("modal-body");
+  if (!selectedPtr) return;
 
-  document.getElementById("detail-card").classList.remove("empty");
-  document.getElementById("detail-card").innerHTML = `
-    ${coverHTML}
-    <div class="detail-title">${b.judul}</div>
-    <div class="detail-author">${b.pengarang}</div>
-    <div class="detail-row">
-      <span class="detail-key">ID</span>
-      <span style="font-family:var(--mono);font-size:12px">#${b._id}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-key">Pointer addr</span>
-      <span class="ptr-badge">${result.addr}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-key">Stok saat ini</span>
-      <span class="stok-badge ${stokClass}">${b.stok}</span>
-    </div>
-    <div class="divider" style="margin:12px 0"></div>
-    <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:8px">buku-&gt;stok = ...</div>
-    <div class="stok-controls">
-      <input class="edit-stk" type="number" id="edit-stok" value="${b.stok}" min="0">
-      <button class="btn-sm" onclick="updateStok()">Simpan</button>
-      <button class="btn-danger" onclick="hapusBuku(${b._id})">Hapus</button>
+  // Gunakan cover dari data, jika kosong pakai placeholder
+  const coverSrc =
+    selectedPtr.cover && selectedPtr.cover !== ""
+      ? selectedPtr.cover
+      : "https://via.placeholder.com/150x200?text=No+Cover";
+
+  const sinopsisText = selectedPtr.sinopsis || "Sinopsis belum tersedia.";
+  const hasEbook = Boolean(selectedPtr.ebookPath);
+
+  container.innerHTML = `
+    <div style="text-align: center;">
+      <img src="${coverSrc}" class="modal-cover-preview" alt="Cover Buku">
+      
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--accent); margin-bottom: 5px;">
+        ADDR: ${selectedPtr.addr}
+      </div>
+      <h2 style="font-family: var(--serif); margin-bottom: 5px; color: var(--ink);">${selectedPtr.judul}</h2>
+      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 5px;">oleh ${selectedPtr.pengarang}</p>
+      <p style="color: var(--accent); font-size: 0.8rem; margin-bottom: 20px;">Kategori: ${selectedPtr.kategori || "Tidak dikategorikan"}</p>
+      
+      <div class="divider"></div>
+
+      <div style="margin-top: 18px; text-align: left; background: #f7f3ea; border: 1px solid #e2dccf; border-radius: 10px; padding: 12px;">
+        <div style="font-size: 0.72rem; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px;">Sinopsis</div>
+        <p style="line-height: 1.55; color: var(--ink); font-size: 0.92rem;">${sinopsisText}</p>
+      </div>
+
+      ${
+        hasEbook
+          ? `<button class="btn-primary" style="width: 100%; margin-top: 14px;" onclick="downloadEbook(${selectedPtr._id})">⬇ Download Ebook</button>`
+          : `<div style="margin-top: 14px; border: 1px dashed #d6cdbb; border-radius: 8px; padding: 10px; color: var(--muted); font-size: 0.86rem;">File ebook belum tersedia</div>`
+      }
+
+      <button class="btn-primary" 
+              style="background: transparent; color: #c0392b; border: 1px solid #c0392b; width: 100%; margin-top: 30px; font-size: 0.8rem;" 
+              onclick="hapusBuku()">
+        🗑 Hapus dari Inventaris
+      </button>
     </div>
   `;
-
-  render();
 }
+
+// Fungsi Kontrol Modal
+function openModal() {
+  const modal = document.getElementById("edit-modal");
+  modal.style.display = "flex";
+  setTimeout(() => modal.classList.add("show"), 10);
+}
+
+function closeModal() {
+  const modal = document.getElementById("edit-modal");
+  modal.classList.remove("show");
+  setTimeout(() => {
+    modal.style.display = "none";
+    selectedPtr = null;
+    render();
+  }, 300);
+}
+
+// Tambahkan event listener untuk menutup modal jika klik di luar box
+window.onclick = function (event) {
+  const modal = document.getElementById("edit-modal");
+  if (event.target == modal) {
+    closeModal();
+  }
+};
 
 // ============================================================
 //  RENDER
@@ -350,7 +400,8 @@ function render() {
   const filtered = inventaris.filter(
     (b) =>
       b.judul.toLowerCase().includes(query) ||
-      b.pengarang.toLowerCase().includes(query),
+      b.pengarang.toLowerCase().includes(query) ||
+      (b.kategori || "").toLowerCase().includes(query),
   );
 
   if (filtered.length === 0) {
@@ -359,11 +410,8 @@ function render() {
   } else {
     list.innerHTML = filtered
       .map((b) => {
-        const realIdx = inventaris.indexOf(b);
-        const addr = getAddr(realIdx);
-        const stokClass =
-          b.stok === 0 ? "stok-empty" : b.stok <= 3 ? "stok-low" : "stok-ok";
-        const isSelected = selectedPtr && selectedPtr.ptr._id === b._id;
+        const isSelected = selectedPtr && selectedPtr._id === b._id;
+        const ptrAddr = b.addr || getAddr(inventaris.indexOf(b));
 
         const coverCell = b.cover
           ? `<img src="${b.cover}" class="cover-thumb" alt="cover" onerror="this.style.display='none';this.nextSibling.style.display='flex'" style="background:#f0f0f0;border-radius:4px;" />
@@ -378,20 +426,15 @@ function render() {
             <div class="book-title">${b.judul}</div>
             <div class="book-author">${b.pengarang}</div>
           </div>
-          <span class="ptr-badge col-addr ${isSelected ? "green" : ""}">${addr}</span>
-          <span class="stok-badge ${stokClass}">${b.stok}</span>
-          <button class="action-btn" onclick="event.stopPropagation();selectBuku(${b._id})">Edit</button>
+          <span class="book-category">${b.kategori || ""}</span>
+          <span class="ptr-badge col-addr ${isSelected ? "green" : ""}">${ptrAddr}</span>
+          <button class="action-btn" onclick="event.stopPropagation();selectBuku(${b._id})">Detail</button>
         </div>`;
       })
       .join("");
   }
 
-  // Update header stats
-  const totalStok = inventaris.reduce((s, b) => s + b.stok, 0);
-  const lowCount = inventaris.filter((b) => b.stok <= 3).length;
   document.getElementById("total-buku").textContent = inventaris.length;
-  document.getElementById("total-stok").textContent = totalStok;
-  document.getElementById("stok-low-count").textContent = lowCount;
 }
 
 // ── SEARCH listener ──
@@ -403,69 +446,71 @@ document.getElementById("search").addEventListener("input", () => {
 });
 
 // ── LOAD DATA FROM SERVER ──
+// [index.js]
 async function loadBooks() {
   try {
+    // 1. Ambil data dari API
     const books = await getAllBooks();
-    
-    // Fix cover hilang setelah refresh: restore local preview untuk buku yang punya cover base64 di localStorage
-    const savedCovers = JSON.parse(localStorage.getItem('libraryos_covers') || '{}');
-    books.forEach(buku => {
-      if (!buku.cover && savedCovers[buku._id]) {
-        buku.cover = savedCovers[buku._id];
-      }
-    });
-    
-    inventaris = books;
 
-    if (books.length > 0) {
-      const numericIds = books
-        .map((b) => b._id)
-        .filter((id) => typeof id === "number" && Number.isFinite(id));
-      const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
+    if (books && books.length > 0) {
+      // 2. Petakan data dan berikan alamat memori simulasi (addr)
+      inventaris = books.map((b, i) => ({
+        ...b,
+        sinopsis: b.sinopsis || "",
+        kategori: b.kategori || "",
+        ebookPath: b.ebookPath || "",
+        ebookName: b.ebookName || "",
+        ebookSize: b.ebookSize || 0,
+        addr: getAddr(i),
+      }));
+
+      // 3. CARI ID TERTINGGI (Penting agar ID baru tidak duplikat/melompat)
+      const maxId = Math.max(...inventaris.map((b) => b._id));
       idCounter = maxId + 1;
 
       log('<span class="log-info">// inventaris[] loaded from MongoDB</span>');
-      log(
-        `<span class="log-ptr">Buku*</span> <span class="log-info">base addr =</span> <span class="log-addr">0x${addrBase.toString(16).toUpperCase()}</span>`,
-      );
-      log(`<span class="log-info">// ${books.length} documents found</span>`);
     } else {
-      log(
-        '<span class="log-info">// inventaris[] is empty — tambahkan buku baru atau jalankan seedData()</span>',
-      );
+      inventaris = [];
+      idCounter = 1; // Jika kosong, mulai dari ID 1
+      log('<span class="log-info">// Database kosong</span>');
     }
   } catch (error) {
-    console.error("Error loading books:", error);
-    log(
-      '<span class="log-info">// Failed to load from MongoDB, check server connection</span>',
-    );
+    console.error("Gagal memuat buku:", error);
   }
 
+  // 4. Update tampilan tabel
   render();
 }
 
 // ── SIDE PANEL TOGGLE ──
 function toggleSidePanel() {
-  const sidePanel = document.querySelector('.side-panel');
-  const toggleBtn = document.getElementById('toggle-side');
-  const mainPanel = document.querySelector('.main-panel');
-  
-  sidePanel.classList.toggle('open');
-  const isOpen = sidePanel.classList.contains('open');
-  
-  toggleBtn.textContent = isOpen ? '✕' : '☰';
-  toggleBtn.title = isOpen ? 'Tutup panel' : 'Buka panel';
-  
-  mainPanel.classList.toggle('has-open-panel', isOpen);
+  const sidePanel = document.querySelector(".side-panel");
+  const toggleBtn = document.getElementById("toggle-side");
+  const mainPanel = document.querySelector(".main-panel");
+
+  sidePanel.classList.toggle("open");
+  const isOpen = sidePanel.classList.contains("open");
+
+  toggleBtn.textContent = isOpen ? "✕" : "☰";
+  toggleBtn.title = isOpen ? "Tutup panel" : "Buka panel";
+
+  mainPanel.classList.toggle("has-open-panel", isOpen);
 }
 
 // Load books when page loads
+// Cukup satu blok DOMContentLoaded saja
+// Hapus semua baris dari "document.addEventListener" sampai paling bawah,
+// lalu ganti dengan ini:
+
 document.addEventListener("DOMContentLoaded", () => {
   hideSplash();
   loadBooks();
-  
-  // Close side panel by default
-  document.querySelector('.side-panel').classList.remove('open');
-  document.getElementById('toggle-side').textContent = '☰';
-});
 
+  // Setup listener untuk menutup modal jika area luar (overlay) diklik
+  const modal = document.getElementById("edit-modal");
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeModal();
+    });
+  }
+});
